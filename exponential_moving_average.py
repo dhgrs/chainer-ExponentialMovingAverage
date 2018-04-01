@@ -10,22 +10,23 @@ class ExponentialMovingAverage(link.Chain):
         self.decay = decay
         with self.init_scope():
             self.target = target
+            self.ema = target.copy()
             for name, param in target.namedparams():
-                setattr(self, 'ema' + name, chainer.Parameter(param.array))
+                setattr(self.ema, name, chainer.Parameter(param.array))
 
     def __call__(self, *args, **kwargs):
         if configuration.config.train:
             ys = self.target(*args, **kwargs)
             with self.init_scope():
-                for name, param in self.target.namedparams():
-                    ema_name = 'ema' + name
-                    if not param.requires_grad or param.array is None:
-                        new_average = param.array
+                for name, target_param in self.target.namedparams():
+                    ema_param = getattr(self.ema, name)
+                    if (not target_param.requires_grad
+                            or ema_param.array is None):
+                        new_average = target_param.array
                     else:
-                        new_average = self.decay * param.array + \
-                            (1 - self.decay) * self[ema_name].array
-                    setattr(self, ema_name, chainer.Parameter(new_average))
+                        new_average = self.decay * target_param.array + \
+                            (1 - self.decay) * ema_param.array
+                    setattr(self.ema, name, chainer.Parameter(new_average))
         else:
-            # TODO: use exponential moving average when train is False
-            ys = self.target(*args, **kwargs)
+            ys = self.ema(*args, **kwargs)
         return ys
